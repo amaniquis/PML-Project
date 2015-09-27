@@ -1,0 +1,85 @@
+---
+title: "Human Activity Recognition"
+author: "Slydacious"
+date: "September 24, 2015"
+output: html_document
+---
+
+###Synopsis
+Using data from accelerometers on the belt, forearm, arm, and dumbell of six
+participants performing barbell lifts both correctly and incorrectly in five
+different ways, we estimate our prediction rate for out of sample data to be
+near 100% accurate. We achieve this by training a gradient boosted model using
+10-fold cross-validation.
+
+###Data Pre-processing
+```{r, message=FALSE}
+# Set random seed for reproducibility
+set.seed(138)
+
+# Load caret library
+library(caret)
+
+# Load the data
+trainData <- read.csv("pml-training.csv", row.names = 1)
+
+# Show dimensions of the data
+dim(trainData)
+
+# Show histogram of number of predictors(columns) with rows containing missing
+# values
+colsWithNA <- colSums(is.na(trainData))
+hist(colsWithNA)
+
+unique(colsWithNA)
+```
+
+Since the number of rows with missing values in some predictors is very
+high, 19216, in relation to the total number of rows in our data, 19622, we
+will remove them instead of impute them.
+
+```{r}
+# Keep predictors where there are no missing values
+trainData <- trainData[colsWithNA == 0]
+
+# Remove predictors that have near zero variance
+nzvCols <- nearZeroVar(trainData)
+trainData <- trainData[ , -nzvCols]
+
+# Partition training data into testing and validation sets using 60% of the 
+# data as training and the other 40% for validation
+pTraining <- createDataPartition(trainData$classe, p = .60, list = F)
+training <- trainData[pTraining,]
+validation <- trainData[-pTraining,]
+```
+
+###Modeling and Training
+Random forests and boosting are usually the two top performing algorithms in
+prediction contents. We will train a gradeint boosting model using ten-fold
+cross validation in order to meet our criteria for this project. Training with
+random forests was not used since that is usually more computationally
+intensive.
+
+```{r, message=FALSE, cache=TRUE}
+# Use 10-fold cross validation
+tControl <- trainControl(method = "cv", number = 10)
+
+# Setup multi-core processing to speed up training
+library(foreach)
+library(doMC)
+registerDoMC(cores = 8)
+
+# Train with a gradient boosted model
+modFit <- train(classe ~ ., data=training, method="gbm", trControl=tControl)
+plot(modFit)
+```
+
+###Results
+```{r, message=FALSE}
+confMatrix <- confusionMatrix(predict(modFit, validation), validation$classe)
+confMatrix$overall
+```
+
+The estimated out-of-sample accuracy of our gradient boosted model using
+ten-fold cross validation is 99.7% resulting in an out-of-sample error estimate
+of less than one percent.
